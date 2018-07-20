@@ -51,6 +51,10 @@ def parse_args():
                         help='Whether to save the trained model.')
     return parser.parse_args()
 
+# my design
+# def init_normal(shape, name=None):
+#     return K.random_normal(shape)
+
 def init_normal(shape, name=None):
     return initializers.RandomNormal(mean=0.0, stddev=0.05, seed=None)#.normal(shape, scale=0.01,name=name)
 
