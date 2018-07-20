@@ -12,11 +12,11 @@ import theano
 import theano.tensor as T
 import keras
 from keras import backend as K
-from keras import initializations
-from keras.regularizers import l2, activity_l2
-from keras.models import Sequential, Graph, Model
+from keras import initializers
+from keras.regularizers import l2
+from keras.models import Sequential, Model
 from keras.layers.core import Dense, Lambda, Activation
-from keras.layers import Embedding, Input, Dense, merge, Reshape, Merge, Flatten, Dropout
+from keras.layers import Embedding, Input, Dense, merge, Reshape, Flatten, Dropout
 from keras.constraints import maxnorm
 from keras.optimizers import Adagrad, Adam, SGD, RMSprop
 from evaluate import evaluate_model
@@ -53,8 +53,12 @@ def parse_args():
                         help='Whether to save the trained model.')
     return parser.parse_args()
 
+# my design
+# def init_normal(shape, name=None):
+#     return K.random_normal(shape)
+
 def init_normal(shape, name=None):
-    return initializations.normal(shape, scale=0.01, name=name)
+    return initializers.RandomNormal(mean=0.0, stddev=0.05, seed=None)#.normal(shape, scale=0.01,name=name)
 
 def get_model(num_users, num_items, layers = [20,10], reg_layers=[0,0]):
     assert len(layers) == len(reg_layers)
