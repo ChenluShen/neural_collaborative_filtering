@@ -15,7 +15,7 @@ from keras import initializers
 from keras.regularizers import l1, l2
 from keras.models import Sequential, Model
 from keras.layers.core import Dense, Lambda, Activation
-from keras.layers import Embedding, Input, Dense, merge, Reshape, Flatten, Dropout
+from keras.layers import Embedding, Input, Dense, merge, Reshape, Flatten, Dropout, Multiply, Concatenate
 from keras.optimizers import Adagrad, Adam, SGD, RMSprop
 from evaluate import evaluate_model
 from Dataset import Dataset
@@ -59,11 +59,6 @@ def parse_args():
                         help='Specify the pretrain model file for MLP part. If empty, no pretrain will be used')
     return parser.parse_args()
 
-
-# my design
-# def init_normal(shape, name=None):
-#     return K.random_normal(shape)
-
 def init_normal(shape, name=None):
     return initializers.RandomNormal(mean=0.0, stddev=0.05, seed=None)#.normal(shape, scale=0.01,name=name)
 
@@ -76,24 +71,24 @@ def get_model(num_users, num_items, mf_dim=10, layers=[10], reg_layers=[0], reg_
     
     # Embedding layer
     MF_Embedding_User = Embedding(input_dim = num_users, output_dim = mf_dim, name = 'mf_embedding_user',
-                                  init = init_normal, W_regularizer = l2(reg_mf), input_length=1)
+                                  input_length=1)(user_input) # init = init_normal, W_regularizer = l2(reg_mf),
     MF_Embedding_Item = Embedding(input_dim = num_items, output_dim = mf_dim, name = 'mf_embedding_item',
-                                  init = init_normal, W_regularizer = l2(reg_mf), input_length=1)   
+                                  input_length=1)(item_input)
 
-    MLP_Embedding_User = Embedding(input_dim = num_users, output_dim = layers[0]/2, name = "mlp_embedding_user",
-                                  init = init_normal, W_regularizer = l2(reg_layers[0]), input_length=1)
-    MLP_Embedding_Item = Embedding(input_dim = num_items, output_dim = layers[0]/2, name = 'mlp_embedding_item',
-                                  init = init_normal, W_regularizer = l2(reg_layers[0]), input_length=1)   
+    MLP_Embedding_User = Embedding(input_dim = num_users, output_dim = int(layers[0]/2), name = "mlp_embedding_user",
+                                  input_length=1)(user_input) # init = init_normal, W_regularizer = l2(int(reg_layers[0])),
+    MLP_Embedding_Item = Embedding(input_dim = num_items, output_dim = int(layers[0]/2), name = 'mlp_embedding_item',
+                                  input_length=1)(item_input)
     
     # MF part
-    mf_user_latent = Flatten()(MF_Embedding_User(user_input))
-    mf_item_latent = Flatten()(MF_Embedding_Item(item_input))
-    mf_vector = merge([mf_user_latent, mf_item_latent], mode = 'mul') # element-wise multiply
+    mf_user_latent = Flatten()(MF_Embedding_User)
+    mf_item_latent = Flatten()(MF_Embedding_Item) # (item_input)
+    mf_vector = Multiply()([mf_user_latent, mf_item_latent])#merge([mf_user_latent, mf_item_latent], mode = 'mul') # element-wise multiply
 
     # MLP part 
-    mlp_user_latent = Flatten()(MLP_Embedding_User(user_input))
-    mlp_item_latent = Flatten()(MLP_Embedding_Item(item_input))
-    mlp_vector = merge([mlp_user_latent, mlp_item_latent], mode = 'concat')
+    mlp_user_latent = Flatten()(MLP_Embedding_User)
+    mlp_item_latent = Flatten()(MLP_Embedding_Item)
+    mlp_vector = Concatenate()([mlp_user_latent, mlp_item_latent])# merge([mlp_user_latent, mlp_item_latent], mode = 'concat')
     for idx in range(1, num_layer):
         layer = Dense(layers[idx], W_regularizer= l2(reg_layers[idx]), activation='relu', name="layer%d" %idx)
         mlp_vector = layer(mlp_vector)
@@ -101,13 +96,12 @@ def get_model(num_users, num_items, mf_dim=10, layers=[10], reg_layers=[0], reg_
     # Concatenate MF and MLP parts
     #mf_vector = Lambda(lambda x: x * alpha)(mf_vector)
     #mlp_vector = Lambda(lambda x : x * (1-alpha))(mlp_vector)
-    predict_vector = merge([mf_vector, mlp_vector], mode = 'concat')
-    
+    predict_vector = Concatenate()([mf_vector, mlp_vector])# merge([mf_vector, mlp_vector], mode = 'concat')
+
     # Final prediction layer
     prediction = Dense(1, activation='sigmoid', init='lecun_uniform', name = "prediction")(predict_vector)
     
-    model = Model(input=[user_input, item_input], 
-                  output=prediction)
+    model = Model(input=[user_input, item_input], output=prediction)
     
     return model
 
@@ -148,7 +142,7 @@ def get_train_instances(train, num_negatives):
         # negative instances
         for t in range(num_negatives):
             j = np.random.randint(num_items)
-            while train.has_key((u, j)):
+            while (u, j) in train:
                 j = np.random.randint(num_items)
             user_input.append(u)
             item_input.append(j)
@@ -220,7 +214,7 @@ if __name__ == '__main__':
         # Training
         hist = model.fit([np.array(user_input), np.array(item_input)], #input
                          np.array(labels), # labels 
-                         batch_size=batch_size, nb_epoch=1, verbose=0, shuffle=True)
+                         batch_size=batch_size, epochs=1, verbose=0, shuffle=True)
         t2 = time()
         
         # Evaluation
